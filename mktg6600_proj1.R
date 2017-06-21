@@ -10,7 +10,7 @@ df %>%
   group_by(discount, color) %>% 
   summarise(amt = dollar(mean(`Amount spent`))) %>% 
   spread(color, amt) %>% 
-  rename(" " = discount) %>% 
+  rename(" " = discount) %>%
   grid.table(rows = NULL)
   
 #ANOVA test for any difference in means
@@ -21,40 +21,93 @@ df %>%
   anova %>% 
   tidy
 
-#Split into group of interest vs all other groups for t.test
-ro <- df %>% filter(discount == "Off" & color == "Red")
-bo <- df %>% filter(discount == "Off" & color == "Black")
-go <- df %>% filter(discount == "Off" & color == "Green")
-rm <- df %>% filter(discount == "Minus" & color == "Red")
-bm <- df %>% filter(discount == "Minus" & color == "Black")
-gm <- df %>% filter(discount == "Minus" & color == "Green")
-all_others <- df %>% filter(discount != "Off" & color != "Red")
+#TukeyHSD test to measure amount of difference and in which groups
+df %>% 
+  rename(amt_spent = `Amount spent`) %>% 
+  unite(category, color, discount) %>% 
+  aov(amt_spent ~ factor(category), .) %>% 
+  TukeyHSD(conf.level = .95) %>% 
+  tidy %>% 
+  separate(comparison, c("compare", "to"), "-") %>% 
+  arrange(adj.p.value) %>% 
+  mutate(adj.p.value = round(adj.p.value, 4))
 
-#Test for normality of distributions
-hist(ro$`Amount spent`)
-hist(all_others$`Amount spent`)
-qqnorm(ro$`Amount spent`) 
-qqline(ro$`Amount spent`, col = 2) #Roughly normal
-qqnorm(all_others$`Amount spent`)
-qqline(all_others$`Amount spent`, col = 2) #Roughly normal
+#Diagnostic plots for one-way anova
+par(mfrow = c(2,2)) #Set viewport to show 4 plots
 
-#Test for equal variances
-var(ro$`Amount spent`)
-var(all_others$`Amount spent`) #Variances are not equal, use Welch's t-test
+df %>% 
+  rename(amt_spent = `Amount spent`) %>% 
+  unite(category, color, discount) %>% 
+  aov(amt_spent ~ factor(category), .) %>% 
+  plot
 
-#Welch's t-test used
-t.test(x = ro$`Amount spent`, 
-       y = all_others$`Amount spent`,
-       alternative = "greater",
-       var.equal = F) #Red/Off is significantly more than the average of all the other sub-groups
+par(mfrow = c(1,1)) #Return viewport to one plot
 
 
-# Split 2nd place subgroup tor t-test
-t.test(x = ro$`Amount spent`, 
-       y = bm$`Amount spent`,
-       alternative = "greater",
-       var.equal = F) #Red/Off is significantly more than second place subgroup
+#Visualize differences in mean amount spent per group
 
+df %>% 
+  rename(amt_spent = `Amount spent`) %>% 
+  unite(category, color, discount) %>% 
+  aov(amt_spent ~ factor(category), .) %>% 
+  TukeyHSD(conf.level = .95, ordered = T) %>% 
+  tidy %>% 
+  mutate(adj.p.value = round(adj.p.value, 4),
+         isSignificant = factor(ifelse(adj.p.value < .05, 1, 0))) %>% 
+  ggplot(aes(x = reorder(comparison, -estimate), 
+             ymin = conf.low, 
+             y = estimate, 
+             ymax = conf.high, 
+             alpha = isSignificant)) +
+    geom_bar(stat = "identity") +
+    geom_errorbar(color = "red", width = .25) +
+    labs(title = "Difference in mean amount spent between each group",
+         y = "Difference in average amount spent") +
+    scale_y_continuous(labels = dollar) +
+    scale_alpha_discrete(range = (c(.4,1))) +
+    theme(axis.title.x = element_blank(),
+          legend.position = "none",
+          panel.background = element_blank(),
+          axis.text.x = element_text(angle = 90))
+    
+
+
+#########  T-tests invalid for multiple comparisons   ###############
+# 
+# #Split into group of interest vs all other groups for t.test
+# ro <- df %>% filter(discount == "Off" & color == "Red")
+# bo <- df %>% filter(discount == "Off" & color == "Black")
+# go <- df %>% filter(discount == "Off" & color == "Green")
+# rm <- df %>% filter(discount == "Minus" & color == "Red")
+# bm <- df %>% filter(discount == "Minus" & color == "Black")
+# gm <- df %>% filter(discount == "Minus" & color == "Green")
+# all_others <- df %>% filter(discount != "Off" & color != "Red")
+# 
+# #Test for normality of distributions
+# hist(ro$`Amount spent`)
+# hist(all_others$`Amount spent`)
+# qqnorm(ro$`Amount spent`) 
+# qqline(ro$`Amount spent`, col = 2) #Roughly normal
+# qqnorm(all_others$`Amount spent`)
+# qqline(all_others$`Amount spent`, col = 2) #Roughly normal
+# 
+# #Test for equal variances
+# var(ro$`Amount spent`)
+# var(all_others$`Amount spent`) #Variances are not equal, use Welch's t-test
+# 
+# #Welch's t-test used
+# t.test(x = ro$`Amount spent`, 
+#        y = all_others$`Amount spent`,
+#        alternative = "greater",
+#        var.equal = F) #Red/Off is significantly more than the average of all the other sub-groups
+# 
+# 
+# # Split 2nd place subgroup tor t-test
+# t.test(x = ro$`Amount spent`, 
+#        y = bm$`Amount spent`,
+#        alternative = "greater",
+#        var.equal = F) #Red/Off is significantly more than second place subgroup
+# 
 
 #Distributions of performance screen designs, bimodal on best performing design
 ggplot() +
@@ -101,6 +154,7 @@ df %>%
   scale_alpha_manual(values = c(.4,1)) +
   theme(panel.background = element_blank(),
         legend.position = "none")
+
 
 #Make table of predicted values for each category with no interactions
 

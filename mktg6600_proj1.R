@@ -2,6 +2,7 @@ library(tidyverse)
 library(scales)
 library(gridExtra)
 library(broom)
+library(stringr)
 
 df <- read_csv("project_data.csv")
 
@@ -53,18 +54,21 @@ df %>%
   TukeyHSD(conf.level = .95, ordered = T) %>% 
   tidy %>% 
   mutate(adj.p.value = round(adj.p.value, 4),
-         isSignificant = factor(ifelse(adj.p.value < .05, 1, 0))) %>% 
+         isSignificant = factor(ifelse(adj.p.value < .05, 1, 0)),
+         isBestPerformer = str_detect(comparison, "Red_Off")) %>% 
   ggplot(aes(x = reorder(comparison, -estimate), 
              ymin = conf.low, 
              y = estimate, 
              ymax = conf.high, 
-             alpha = isSignificant)) +
+             fill = isSignificant,
+             alpha = isBestPerformer)) +
     geom_bar(stat = "identity") +
     geom_errorbar(color = "red", width = .25) +
-    labs(title = "Difference in mean amount spent between each group",
+    labs(title = "Contrast of interest is statistically significant",
          y = "Difference in average amount spent") +
     scale_y_continuous(labels = dollar) +
-    scale_alpha_discrete(range = (c(.4,1))) +
+    scale_alpha_discrete(range = (c(.2,1))) +
+    #scale_fill_manual(values = c("darkgray", "green")) +
     theme(axis.title.x = element_blank(),
           legend.position = "none",
           panel.background = element_blank(),
